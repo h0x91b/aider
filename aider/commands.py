@@ -8,7 +8,7 @@ import git
 import tiktoken
 from prompt_toolkit.completion import Completion
 
-from aider import prompts
+from aider import prompts, voice
 
 from .dump import dump  # noqa: F401
 
@@ -85,7 +85,7 @@ class Commands:
             return
 
         commit_message = args.strip()
-        self.coder.commit(message=commit_message, which="repo_files")
+        self.coder.repo.commit(message=commit_message)
 
     def cmd_clear(self, args):
         "Clear the chat history"
@@ -307,9 +307,7 @@ class Commands:
         if self.coder.repo and git_added:
             git_added = " ".join(git_added)
             commit_message = f"aider: Added {git_added}"
-            self.coder.repo.repo.git.commit("-m", commit_message, "--no-verify")
-            commit_hash = self.coder.repo.repo.head.commit.hexsha[:7]
-            self.io.tool_output(f"Commit {commit_hash} {commit_message}")
+            self.coder.repo.commit(message=commit_message)
 
         if not added_fnames:
             return
@@ -352,8 +350,9 @@ class Commands:
         combined_output = None
         try:
             parsed_args = shlex.split("git " + args)
+            env = dict(GIT_EDITOR="true", **subprocess.os.environ)
             result = subprocess.run(
-                parsed_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+                parsed_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
             )
             combined_output = result.stdout
         except Exception as e:
@@ -434,6 +433,22 @@ class Commands:
                 self.io.tool_output(f"{cmd} {description}")
             else:
                 self.io.tool_output(f"{cmd} No description available.")
+
+    def cmd_voice(self, args):
+        "Record and transcribe voice input"
+        v = voice.Voice()
+
+        if not v.is_audio_available():
+            self.io.tool_error("Unable to import `sounddevice`, is portaudio installed?")
+            return
+
+        text = v.record_and_transcribe()
+        self.io.add_to_file_history(text)
+        print()
+        self.io.user_input(text, log_only=False)
+        print()
+
+        return text
 
 
 def expand_subdir(file_path):

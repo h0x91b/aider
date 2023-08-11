@@ -239,8 +239,8 @@ def main(
     dirnames: List[str] = typer.Argument(..., help="Directory names"),
     model: str = typer.Option("gpt-3.5-turbo", "--model", "-m", help="Model name"),
     edit_format: str = typer.Option(None, "--edit-format", "-e", help="Edit format"),
-    keyword: str = typer.Option(
-        None, "--keyword", "-k", help="Only run tests that contain keyword"
+    keywords: str = typer.Option(
+        None, "--keywords", "-k", help="Only run tests that contain keywords (comma sep)"
     ),
     clean: bool = typer.Option(
         False, "--clean", "-c", help="Discard the existing testdir and make a clean copy"
@@ -253,6 +253,7 @@ def main(
     stats_only: bool = typer.Option(
         False, "--stats", "-s", help="Do not run tests, just collect stats on completed tests"
     ),
+    diffs_only: bool = typer.Option(False, "--diffs", help="Just diff the provided stats dirs"),
     tries: int = typer.Option(2, "--tries", "-r", help="Number of tries for running tests"),
     threads: int = typer.Option(1, "--threads", "-t", help="Number of threads to run in parallel"),
     num_tests: int = typer.Option(-1, "--num-tests", "-n", help="Number of tests to run"),
@@ -262,8 +263,8 @@ def main(
     if repo.is_dirty():
         commit_hash += "-dirty"
 
-    if len(dirnames) > 1 and not stats_only:
-        print("Only provide 1 dirname unless running with --stats")
+    if len(dirnames) > 1 and not (stats_only or diffs_only):
+        print("Only provide 1 dirname unless running with --stats or --diffs")
         return 1
 
     updated_dirnames = []
@@ -276,6 +277,9 @@ def main(
 
     if stats_only:
         return show_stats(updated_dirnames)
+
+    if diffs_only:
+        return show_diffs(updated_dirnames)
 
     assert len(updated_dirnames) == 1, updated_dirnames
     dirname = updated_dirnames[0]
@@ -307,8 +311,9 @@ def main(
 
     test_dnames = sorted(os.listdir(dirname))
 
-    if keyword:
-        test_dnames = [dn for dn in test_dnames if keyword in dn]
+    if keywords:
+        keywords = keywords.split(",")
+        test_dnames = [dn for dn in test_dnames for keyword in keywords if keyword in dn]
 
     random.shuffle(test_dnames)
     if num_tests > 0:
@@ -353,11 +358,53 @@ def main(
     return 0
 
 
-def summarize_results(dirname):
-    res = SimpleNamespace()
+def show_diffs(dirnames):
+    dirnames = sorted(dirnames)
+
+    all_results = dict((dirname, load_results(dirname)) for dirname in dirnames)
+    testcases = set()
+    for results in all_results.values():
+        testcases.update(result["testcase"] for result in results)
+
+    testcases = sorted(testcases)
+
+    unchanged = set()
+
+    for testcase in testcases:
+        all_outcomes = []
+        for dirname in dirnames:
+            results = all_results[dirname]
+            result = [r for r in results if r["testcase"] == testcase][0]
+
+            outcomes = tuple(result["tests_outcomes"])
+            all_outcomes.append(True in outcomes)
+
+        if len(set(all_outcomes)) == 1:
+            unchanged.add(testcase)
+            continue
+
+        print()
+        print(testcase)
+        for outcome, dirname in zip(all_outcomes, dirnames):
+            print(outcome, f"{dirname}/{testcase}/.aider.chat.history.md")
+
+    changed = set(testcases) - unchanged
+    print()
+    print("changed:", len(changed), ",".join(sorted(changed)))
+    print("unchanged:", len(unchanged), ",".join(sorted(unchanged)))
+
+
+def load_results(dirname):
     dirname = Path(dirname)
-    res.total_tests = len(list(dirname.glob("*")))
     all_results = [json.loads(fname.read_text()) for fname in dirname.glob("*/.aider.results.json")]
+    return all_results
+
+
+def summarize_results(dirname):
+    all_results = load_results(dirname)
+
+    res = SimpleNamespace()
+    res.total_tests = len(list(Path(dirname).glob("*")))
 
     try:
         tries = max(len(results["tests_outcomes"]) for results in all_results if results)
@@ -610,7 +657,7 @@ def run_unit_tests(testdir, history_fname):
 
     success = result.returncode == 0
     res = result.stdout
-    res = cleanup_test_output(res)
+    res = cleanup_test_output(res, testdir)
 
     with history_fname.open("a") as fh:
         fh.write(f"```\n{res}\n```")
@@ -620,7 +667,7 @@ def run_unit_tests(testdir, history_fname):
         return res
 
 
-def cleanup_test_output(output):
+def cleanup_test_output(output, testdir):
     # remove timing info, to avoid randomizing the response to GPT
     res = re.sub(
         r"^Ran \d+ tests in \d+\.\d+s$",
@@ -640,6 +687,8 @@ def cleanup_test_output(output):
         res,
         flags=re.MULTILINE,
     )
+
+    res = res.replace(str(testdir), str(testdir.name))
     return res
 
 
