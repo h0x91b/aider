@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -148,6 +149,12 @@ def main(argv=None, input=None, output=None, force_git_root=None):
         const=models.GPT35_16k.name,
         help=f"Use {models.GPT35_16k.name} model for the main chat (gpt-4 is better)",
     )
+    core_group.add_argument(
+        "--voice-language",
+        metavar="VOICE_LANGUAGE",
+        default="en",
+        help="Specify the language for voice using ISO 639-1 code (default: auto)",
+    )
 
     ##########
     model_group = parser.add_argument_group("Advanced Model Settings")
@@ -226,22 +233,15 @@ def main(argv=None, input=None, output=None, force_git_root=None):
     )
     output_group.add_argument(
         "--pretty",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="Enable pretty, colorized output (default: True)",
+        help="Enable/disable pretty, colorized output (default: True)",
     )
     output_group.add_argument(
-        "--no-pretty",
-        action="store_false",
-        dest="pretty",
-        help="Disable pretty, colorized output",
-    )
-    output_group.add_argument(
-        "--no-stream",
-        action="store_false",
-        dest="stream",
+        "--stream",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="Disable streaming responses",
+        help="Enable/disable streaming responses (default: True)",
     )
     output_group.add_argument(
         "--user-input-color",
@@ -281,43 +281,28 @@ def main(argv=None, input=None, output=None, force_git_root=None):
     ##########
     git_group = parser.add_argument_group("Git Settings")
     git_group.add_argument(
-        "--no-git",
-        action="store_false",
-        dest="git",
+        "--git",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="Do not look for a git repo",
+        help="Enable/disable looking for a git repo (default: True)",
     )
     git_group.add_argument(
         "--auto-commits",
-        action="store_true",
-        dest="auto_commits",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="Enable auto commit of GPT changes (default: True)",
-    )
-    git_group.add_argument(
-        "--no-auto-commits",
-        action="store_false",
-        dest="auto_commits",
-        help="Disable auto commit of GPT changes (implies --no-dirty-commits)",
+        help="Enable/disable auto commit of GPT changes (default: True)",
     )
     git_group.add_argument(
         "--dirty-commits",
-        action="store_true",
-        dest="dirty_commits",
-        help="Enable commits when repo is found dirty",
+        action=argparse.BooleanOptionalAction,
         default=True,
-    )
-    git_group.add_argument(
-        "--no-dirty-commits",
-        action="store_false",
-        dest="dirty_commits",
-        help="Disable commits when repo is found dirty",
+        help="Enable/disable commits when repo is found dirty (default: True)",
     )
     git_group.add_argument(
         "--dry-run",
-        action="store_true",
-        help="Perform a dry run without modifying files (default: False)",
+        action=argparse.BooleanOptionalAction,
         default=False,
+        help="Enable/disable performing a dry run without modifying files (default: False)",
     )
 
     ##########
@@ -464,8 +449,6 @@ def main(argv=None, input=None, output=None, force_git_root=None):
             )
         return 1
 
-    main_model = models.Model(args.model)
-
     openai.api_key = args.openai_api_key
     for attr in ("base", "type", "version", "deployment_id", "engine"):
         arg_key = f"openai_api_{attr}"
@@ -474,6 +457,8 @@ def main(argv=None, input=None, output=None, force_git_root=None):
             mod_key = f"api_{attr}"
             setattr(openai, mod_key, val)
             io.tool_output(f"Setting openai.{mod_key}={val}")
+
+    main_model = models.Model.create(args.model)
 
     try:
         coder = Coder.create(
@@ -494,6 +479,7 @@ def main(argv=None, input=None, output=None, force_git_root=None):
             code_theme=args.code_theme,
             stream=args.stream,
             use_git=args.git,
+            voice_language=args.voice_language,
         )
     except ValueError as err:
         io.tool_error(str(err))
@@ -514,8 +500,6 @@ def main(argv=None, input=None, output=None, force_git_root=None):
         return
 
     io.tool_output("Use /help to see in-chat commands, run with --help to see cmd line args")
-
-    coder.dirty_commit()
 
     if args.message:
         io.tool_output()

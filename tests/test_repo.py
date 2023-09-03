@@ -26,7 +26,7 @@ class TestRepo(unittest.TestCase):
             fname.write_text("workingdir\n")
 
             git_repo = GitRepo(InputOutput(), None, ".")
-            diffs = git_repo.get_diffs(False)
+            diffs = git_repo.get_diffs()
             self.assertIn("index", diffs)
             self.assertIn("workingdir", diffs)
 
@@ -49,7 +49,7 @@ class TestRepo(unittest.TestCase):
             fname2.write_text("workingdir\n")
 
             git_repo = GitRepo(InputOutput(), None, ".")
-            diffs = git_repo.get_diffs(False)
+            diffs = git_repo.get_diffs()
             self.assertIn("index", diffs)
             self.assertIn("workingdir", diffs)
 
@@ -67,7 +67,7 @@ class TestRepo(unittest.TestCase):
             repo.git.commit("-m", "second")
 
             git_repo = GitRepo(InputOutput(), None, ".")
-            diffs = git_repo.get_diffs(False, ["HEAD~1", "HEAD"])
+            diffs = git_repo.diff_commits(False, "HEAD~1", "HEAD")
             dump(diffs)
             self.assertIn("two", diffs)
 
@@ -170,3 +170,27 @@ class TestRepo(unittest.TestCase):
             fnames = git_repo.get_tracked_files()
             self.assertIn(str(fname), fnames)
             self.assertIn(str(fname2), fnames)
+
+    def test_get_tracked_files_from_subdir(self):
+        with GitTemporaryDirectory():
+            # new repo
+            raw_repo = git.Repo()
+
+            # add it, but no commits at all in the raw_repo yet
+            fname = Path("subdir/new.txt")
+            fname.parent.mkdir()
+            fname.touch()
+            raw_repo.git.add(str(fname))
+
+            os.chdir(fname.parent)
+
+            git_repo = GitRepo(InputOutput(), None, None)
+
+            # better be there
+            fnames = git_repo.get_tracked_files()
+            self.assertIn(str(fname), fnames)
+
+            # commit it, better still be there
+            raw_repo.git.commit("-m", "new")
+            fnames = git_repo.get_tracked_files()
+            self.assertIn(str(fname), fnames)

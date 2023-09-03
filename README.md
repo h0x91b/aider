@@ -30,6 +30,7 @@ Aider is unique in that it [works well with pre-existing, larger codebases](http
 - [Installation](https://aider.chat/docs/install.html)
 - [Voice-to-code](https://aider.chat/docs/voice.html)
 - [FAQ](https://aider.chat/docs/faq.html)
+- [Discord](https://discord.gg/Tv2uQnR88V)
 
 ## Getting started
 
@@ -73,7 +74,7 @@ You can find more chat transcripts on the [examples page](https://aider.chat/exa
 * Aider will [automatically commit each changeset to your local git repo](https://aider.chat/docs/faq.html#how-does-aider-use-git) with a descriptive commit message. These frequent, automatic commits provide a safety net. It's easy to undo changes or use standard git workflows to manage longer sequences of changes.
 * You can use aider with multiple source files at once, so GPT can make coordinated code changes across all of them in a single changeset/commit.
 * Aider can [give *GPT-4* a map of your entire git repo](https://aider.chat/docs/ctags.html), which helps it understand and modify large codebases.
-* You can also edit files by hand using your editor while chatting with aider. Aider will notice these out-of-band edits and ask if you'd like to commit them. This lets you bounce back and forth between the aider chat and your editor, to collaboratively code with GPT.
+* You can also edit files by hand using your editor while chatting with aider. Aider will notice these out-of-band edits and keep GPT up to date with the latest versions of your files. This lets you bounce back and forth between the aider chat and your editor, to collaboratively code with GPT.
 
 
 ## Usage
@@ -117,6 +118,7 @@ Aider supports commands from within the chat, which all start with `/`. Here are
 * `/undo`: Undo the last git commit if it was done by aider.
 * `/diff`: Display the diff of the last aider commit.
 * `/run <command>`: Run a shell command and optionally add the output to the chat.
+* `/voice`: Speak to aider to [request code changes with your voice](https://aider.chat/docs/voice.html).
 * `/help`: Show help about all commands.
 
 See the [full command docs](https://aider.chat/docs/commands.html) for more information.
@@ -168,3 +170,4 @@ For more information, see the [FAQ](https://aider.chat/docs/faq.html).
 * *This project is stellar.* -- [funkytaco](https://github.com/paul-gauthier/aider/issues/112#issuecomment-1637429008)
 * *Amazing project, definitely the best AI coding assistant I've used.* -- [joshuavial](https://github.com/paul-gauthier/aider/issues/84)
 * *I am an aider addict. I'm getting so much more work done, but in less time.* -- [dandandan](https://discord.com/channels/1131200896827654144/1131200896827654149/1135913253483069470)
+* *Best agent for actual dev work in existing codebases.* -- [Nick Dobos](https://twitter.com/NickADobos/status/1690408967963652097?s=20)

@@ -1,5 +1,13 @@
 # Release history
 
+### v0.13.0
+
+- [Only git commit dirty files that GPT tries to edit](https://aider.chat/docs/faq.html#how-did-v0130-change-git-usage)
+- Send chat history as prompt/context for Whisper voice transcription
+- Added `--voice-language` switch to constrain `/voice` to transcribe to a specific language
+- Late-bind importing `sounddevice`, as it was slowing down aider startup
+- Improved --foo/--no-foo switch handling for command line and yml config settings
+
 ### v0.12.0
 
 - [Voice-to-code](https://aider.chat/docs/voice.html) support, which allows you to code with your voice.

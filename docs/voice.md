@@ -19,8 +19,8 @@ information on how to enable the `/voice` command.
 <br/>
 <div class="chat-transcript" markdown="1">
 
-> Aider v0.11.2-dev
-> Added app.py to the chat.
+> Aider v0.11.2-dev  
+> Added app.py to the chat.  
 
 #### /voice
 
@@ -105,8 +105,8 @@ if __name__ == '__main__':
 >>>>>>> updated
 ```
 
-> Applied edit to app.py
-> Commit ef9e3e7 aider: Add a factorial endpoint that uses math.factorial.
+> Applied edit to app.py  
+> Commit ef9e3e7 aider: Add a factorial endpoint that uses math.factorial.  
 
 </div>
 <br/>
