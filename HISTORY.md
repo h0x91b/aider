@@ -1,5 +1,20 @@
 # Release history
 
+### v0.14.1
+
+- /add and /drop handle absolute filenames and quoted filenames
+- /add checks to be sure files are within the git repo (or root)
+- If needed, warn users that in-chat file paths are all relative to the git repo
+- Fixed /add bug in when aider launched in repo subdir
+- Show models supported by api/key if requested model isn't available
+
+### v0.14.0
+
+- [Support for Claude2 and other LLMs via OpenRouter](https://aider.chat/docs/faq.html#accessing-other-llms-with-openrouter) by @joshuavial
+- Documentation for [running the aider benchmarking suite](https://github.com/paul-gauthier/aider/tree/main/benchmark)
+- Aider now requires Python >= 3.9
+
+
 ### v0.13.0
 
 - [Only git commit dirty files that GPT tries to edit](https://aider.chat/docs/faq.html#how-did-v0130-change-git-usage)

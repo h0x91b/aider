@@ -1,8 +1,6 @@
 import argparse
 import json
 
-import tiktoken
-
 from aider import models, prompts
 from aider.dump import dump  # noqa: F401
 from aider.sendchat import simple_send_with_retries
@@ -87,6 +85,8 @@ class ChatSummary:
         ]
 
         summary = simple_send_with_retries(self.model.name, messages)
+        if summary is None:
+            raise ValueError(f"summarizer unexpectedly failed for {self.model.name}")
         summary = prompts.summary_prefix + summary
 
         return [dict(role="user", content=summary)]

@@ -74,6 +74,13 @@ def check_gitignore(git_root, io, ask=True):
     if not git_root:
         return
 
+    try:
+        repo = git.Repo(git_root)
+        if repo.ignored(".aider"):
+            return
+    except git.exc.InvalidGitRepositoryError:
+        pass
+
     pat = ".aider*"
 
     gitignore_file = Path(git_root) / ".gitignore"
@@ -141,6 +148,12 @@ def main(argv=None, input=None, output=None, force_git_root=None):
         metavar="MODEL",
         default=models.GPT4.name,
         help=f"Specify the model to use for the main chat (default: {models.GPT4.name})",
+    )
+    core_group.add_argument(
+        "--skip-model-availability-check",
+        metavar="SKIP_MODEL_AVAILABILITY_CHECK",
+        default=False,
+        help="Override to skip model availability check (default: False)",
     )
     core_group.add_argument(
         "-3",
@@ -287,6 +300,12 @@ def main(argv=None, input=None, output=None, force_git_root=None):
         help="Enable/disable looking for a git repo (default: True)",
     )
     git_group.add_argument(
+        "--gitignore",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable/disable adding .aider* to .gitignore (default: True)",
+    )
+    git_group.add_argument(
         "--auto-commits",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -423,7 +442,8 @@ def main(argv=None, input=None, output=None, force_git_root=None):
 
     if args.git:
         git_root = setup_git(git_root, io)
-        check_gitignore(git_root, io)
+        if args.gitignore:
+            check_gitignore(git_root, io)
 
     def scrub_sensitive_info(text):
         # Replace sensitive information with placeholder
@@ -465,6 +485,7 @@ def main(argv=None, input=None, output=None, force_git_root=None):
             main_model,
             args.edit_format,
             io,
+            args.skip_model_availability_check,
             ##
             fnames=fnames,
             git_dname=git_dname,
@@ -500,6 +521,15 @@ def main(argv=None, input=None, output=None, force_git_root=None):
         return
 
     io.tool_output("Use /help to see in-chat commands, run with --help to see cmd line args")
+
+    if git_root and Path.cwd().resolve() != Path(git_root).resolve():
+        io.tool_error(
+            "Note: in-chat filenames are always relative to the git working dir, not the current"
+            " working dir."
+        )
+
+        io.tool_error(f"Cur working dir: {Path.cwd()}")
+        io.tool_error(f"Git working dir: {git_root}")
 
     if args.message:
         io.tool_output()
