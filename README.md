@@ -1,3 +1,18 @@
+# Test new LLMs (Llama2, CodeLlama, etc.)
+
+Test other LLMs (codellama, llama2, anthropic, cohere, etc.) with Aider, we just open-sourced a 1-click proxy to translate openai calls to huggingface, anthropic, togetherai, etc. api calls.
+
+**code**
+```
+$ pip install litellm
+$ litellm --model huggingface/bigcode/starcoder
+#INFO:     Uvicorn running on http://0.0.0.0:8000
+```
+
+Docs: https://docs.litellm.ai/docs/proxy_server
+
+I'd love to know if this solves any problem for you
+
 # aider is AI pair programming in your terminal
 
 Aider is a command line tool that lets you pair program with GPT-3.5/GPT-4,
