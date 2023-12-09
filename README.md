@@ -1,14 +1,13 @@
+
 # aider is AI pair programming in your terminal
 
 Aider is a command line tool that lets you pair program with GPT-3.5/GPT-4,
 to edit code stored in your local git repository.
 You can start a new project or work with an existing repo.
-And you can fluidly switch back and forth between the aider chat where you ask
-GPT to edit the code and your own editor to make changes yourself.
-Aider makes sure edits from you and GPT are
+Aider makes sure edits from GPT are
 [committed to git](https://aider.chat/docs/faq.html#how-does-aider-use-git)
 with sensible commit messages.
-Aider is unique in that it [works well with pre-existing, larger codebases](https://aider.chat/docs/ctags.html).
+Aider is unique in that it lets you ask for changes to [pre-existing, larger codebases](https://aider.chat/docs/repomap.html).
 
 <p align="center">
   <img src="assets/screencast.svg" alt="aider screencast">
@@ -31,6 +30,22 @@ Aider is unique in that it [works well with pre-existing, larger codebases](http
 - [Voice-to-code](https://aider.chat/docs/voice.html)
 - [FAQ](https://aider.chat/docs/faq.html)
 - [Discord](https://discord.gg/Tv2uQnR88V)
+
+## New GPT-4 Turbo with 128k context window
+
+Aider supports OpenAI's new GPT-4 model that has the massive 128k context window.
+Early benchmark results
+indicate that it is
+[very fast](https://aider.chat/docs/benchmarks-speed-1106.html)
+and a bit
+[better at coding](https://aider.chat/docs/benchmarks-1106.html)
+than previous GPT-4 models.
+
+To use it, run aider like this:
+
+```
+aider --model gpt-4-1106-preview
+```
 
 ## Getting started
 
@@ -61,7 +76,7 @@ Here are some example transcripts that show how you can chat with `aider` to wri
 * [**Complex Multi-file Change with Debugging**](https://aider.chat/examples/complex-change.html): GPT makes a complex code change that is coordinated across multiple source files, and resolves bugs by reviewing error output and doc snippets.
 
 * [**Create a Black Box Test Case**](https://aider.chat/examples/add-test.html): GPT creates a "black box" test case without access to the source of the method being tested, using only a
-[high level map of the repository based on ctags](https://aider.chat/docs/ctags.html).
+[high level map of the repository based on tree-sitter](https://aider.chat/docs/repomap.html).
 
 You can find more chat transcripts on the [examples page](https://aider.chat/examples/).
 
@@ -73,7 +88,7 @@ You can find more chat transcripts on the [examples page](https://aider.chat/exa
 * Aider will apply the edits suggested by GPT directly to your source files.
 * Aider will [automatically commit each changeset to your local git repo](https://aider.chat/docs/faq.html#how-does-aider-use-git) with a descriptive commit message. These frequent, automatic commits provide a safety net. It's easy to undo changes or use standard git workflows to manage longer sequences of changes.
 * You can use aider with multiple source files at once, so GPT can make coordinated code changes across all of them in a single changeset/commit.
-* Aider can [give *GPT-4* a map of your entire git repo](https://aider.chat/docs/ctags.html), which helps it understand and modify large codebases.
+* Aider can [give *GPT-4* a map of your entire git repo](https://aider.chat/docs/repomap.html), which helps it understand and modify large codebases.
 * You can also edit files by hand using your editor while chatting with aider. Aider will notice these out-of-band edits and keep GPT up to date with the latest versions of your files. This lets you bounce back and forth between the aider chat and your editor, to collaboratively code with GPT.
 
 
@@ -134,7 +149,7 @@ Aider has some ability to help GPT figure out which files to edit all by itself,
 * Use Meta-ENTER (Esc+ENTER in some environments) to enter multiline chat messages. Or enter `{` alone on the first line to start a multiline message and `}` alone on the last line to end it.
 * If your code is throwing an error, share the error output with GPT using `/run` or by pasting it into the chat. Let GPT figure out and fix the bug.
 * GPT knows about a lot of standard tools and libraries, but may get some of the fine details wrong about APIs and function arguments. You can paste doc snippets into the chat to resolve these issues.
-* GPT can only see the content of the files you specifically "add to the chat". Aider also sends GPT-4 a [map of your entire git repo](https://aider.chat/docs/ctags.html). So GPT may ask to see additional files if it feels that's needed for your requests.
+* GPT can only see the content of the files you specifically "add to the chat". Aider also sends GPT-4 a [map of your entire git repo](https://aider.chat/docs/repomap.html). So GPT may ask to see additional files if it feels that's needed for your requests.
 * I also shared some general [GPT coding tips on Hacker News](https://news.ycombinator.com/item?id=36211879).
 
 
@@ -162,11 +177,15 @@ For more information, see the [FAQ](https://aider.chat/docs/faq.html).
 * *The best AI coding assistant so far.* -- [Matthew Berman](https://www.youtube.com/watch?v=df8afeb1FY8)
 * *Hands down, this is the best AI coding assistant tool so far.* -- [IndyDevDan](https://www.youtube.com/watch?v=MPYFPvxfGZs)
 * *Aider ... has easily quadrupled my coding productivity.* -- [SOLAR_FIELDS](https://news.ycombinator.com/item?id=36212100)
+* *It's a cool workflow... Aider's ergonomics are perfect for me.* -- [qup](https://news.ycombinator.com/item?id=38185326)
 * *It's really like having your senior developer live right in your Git repo - truly amazing!* -- [rappster](https://github.com/paul-gauthier/aider/issues/124)
 * *What an amazing tool. It's incredible.* -- [valyagolev](https://github.com/paul-gauthier/aider/issues/6#issue-1722897858)
 * *Aider is such an astounding thing!* -- [cgrothaus](https://github.com/paul-gauthier/aider/issues/82#issuecomment-1631876700)
 * *It was WAY faster than I would be getting off the ground and making the first few working versions.* -- [Daniel Feldman](https://twitter.com/d_feldman/status/1662295077387923456)
+* *THANK YOU for Aider! It really feels like a glimpse into the future of coding.* -- [derwiki](https://news.ycombinator.com/item?id=38205643)
+* *It's just amazing.  It is freeing me to do things I felt were out my comfort zone before.* -- [Dougie](https://discord.com/channels/1131200896827654144/1174002618058678323/1174084556257775656)
 * *This project is stellar.* -- [funkytaco](https://github.com/paul-gauthier/aider/issues/112#issuecomment-1637429008)
 * *Amazing project, definitely the best AI coding assistant I've used.* -- [joshuavial](https://github.com/paul-gauthier/aider/issues/84)
 * *I am an aider addict. I'm getting so much more work done, but in less time.* -- [dandandan](https://discord.com/channels/1131200896827654144/1131200896827654149/1135913253483069470)
+* *After wasting $100 on tokens trying to find something better, I'm back to Aider. It blows everything else out of the water hands down, there's no competition whatsoever.* -- [SystemSculpt](https://discord.com/channels/1131200896827654144/1131200896827654149/1178736602797846548)
 * *Best agent for actual dev work in existing codebases.* -- [Nick Dobos](https://twitter.com/NickADobos/status/1690408967963652097?s=20)

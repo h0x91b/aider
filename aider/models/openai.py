@@ -7,6 +7,8 @@ from .model import Model
 known_tokens = {
     "gpt-3.5-turbo": 4,
     "gpt-4": 8,
+    "gpt-4-1106-preview": 128,
+    "gpt-3.5-turbo-1106": 16,
 }
 
 
@@ -38,22 +40,35 @@ class OpenAIModel(Model):
             if tokens == 8:
                 self.prompt_price = 0.03
                 self.completion_price = 0.06
+                self.max_chat_history_tokens = 1024
             elif tokens == 32:
                 self.prompt_price = 0.06
                 self.completion_price = 0.12
+                self.max_chat_history_tokens = 3 * 1024
+            elif tokens == 128:
+                self.prompt_price = 0.01
+                self.completion_price = 0.03
+                self.max_chat_history_tokens = 4 * 1024
 
             return
 
         if self.is_gpt35():
             self.edit_format = "whole"
             self.always_available = True
+            self.send_undo_reply = False
 
-            if tokens == 4:
+            if self.name == "gpt-3.5-turbo-1106":
+                self.prompt_price = 0.001
+                self.completion_price = 0.002
+                self.max_chat_history_tokens = 3 * 1024
+            elif tokens == 4:
                 self.prompt_price = 0.0015
                 self.completion_price = 0.002
+                self.max_chat_history_tokens = 1024
             elif tokens == 16:
                 self.prompt_price = 0.003
                 self.completion_price = 0.004
+                self.max_chat_history_tokens = 2 * 1024
 
             return
 

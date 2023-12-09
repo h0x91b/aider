@@ -19,6 +19,7 @@ from rich.markdown import Markdown
 from aider import models, prompts, utils
 from aider.commands import Commands
 from aider.history import ChatSummary
+from aider.io import InputOutput
 from aider.repo import GitRepo
 from aider.repomap import RepoMap
 from aider.sendchat import send_with_retries
@@ -39,6 +40,7 @@ def wrap_fence(name):
 
 
 class Coder:
+    client = None
     abs_fnames = None
     repo = None
     last_aider_commit_hash = None
@@ -52,38 +54,41 @@ class Coder:
     @classmethod
     def create(
         self,
-        main_model,
-        edit_format,
-        io,
+        main_model=None,
+        edit_format=None,
+        io=None,
+        client=None,
         skip_model_availabily_check=False,
         **kwargs,
     ):
         from . import EditBlockCoder, WholeFileCoder
 
         if not main_model:
-            main_model = models.GPT35_16k
+            main_model = models.GPT4
 
         if not skip_model_availabily_check and not main_model.always_available:
-            if not check_model_availability(io, main_model):
+            if not check_model_availability(io, client, main_model):
+                fallback_model = models.GPT35_1106
                 if main_model != models.GPT4:
                     io.tool_error(
                         f"API key does not support {main_model.name}, falling back to"
-                        f" {models.GPT35_16k.name}"
+                        f" {fallback_model.name}"
                     )
-                main_model = models.GPT35_16k
+                main_model = fallback_model
 
         if edit_format is None:
             edit_format = main_model.edit_format
 
         if edit_format == "diff":
-            return EditBlockCoder(main_model, io, **kwargs)
+            return EditBlockCoder(client, main_model, io, **kwargs)
         elif edit_format == "whole":
-            return WholeFileCoder(main_model, io, **kwargs)
+            return WholeFileCoder(client, main_model, io, **kwargs)
         else:
             raise ValueError(f"Unknown edit format {edit_format}")
 
     def __init__(
         self,
+        client,
         main_model,
         io,
         fnames=None,
@@ -100,9 +105,15 @@ class Coder:
         stream=True,
         use_git=True,
         voice_language=None,
+        aider_ignore_file=None,
     ):
+        self.client = client
+
         if not fnames:
             fnames = []
+
+        if io is None:
+            io = InputOutput()
 
         self.chat_completion_call_hashes = []
         self.chat_completion_response_hashes = []
@@ -154,7 +165,9 @@ class Coder:
 
         if use_git:
             try:
-                self.repo = GitRepo(self.io, fnames, git_dname)
+                self.repo = GitRepo(
+                    self.io, fnames, git_dname, aider_ignore_file, client=self.client
+                )
                 self.root = self.repo.root
             except FileNotFoundError:
                 self.repo = None
@@ -176,24 +189,22 @@ class Coder:
                 self.verbose,
             )
 
-            if self.repo_map.use_ctags:
-                self.io.tool_output(f"Repo-map: universal-ctags using {map_tokens} tokens")
-            elif not self.repo_map.has_ctags and map_tokens > 0:
-                self.io.tool_output(
-                    f"Repo-map: basic using {map_tokens} tokens"
-                    f" ({self.repo_map.ctags_disabled_reason})"
-                )
-            else:
-                self.io.tool_output("Repo-map: disabled because map_tokens == 0")
+        if map_tokens > 0:
+            self.io.tool_output(f"Repo-map: using {map_tokens} tokens")
         else:
-            self.io.tool_output("Repo-map: disabled")
+            self.io.tool_output("Repo-map: disabled because map_tokens == 0")
 
         for fname in self.get_inchat_relative_files():
             self.io.tool_output(f"Added {fname} to the chat.")
 
-        self.summarizer = ChatSummary(models.Model.weak_model())
+        self.summarizer = ChatSummary(
+            self.client,
+            models.Model.weak_model(),
+            self.main_model.max_chat_history_tokens,
+        )
+
         self.summarizer_thread = None
-        self.summarized_done_messages = None
+        self.summarized_done_messages = []
 
         # validate the functions jsonschema
         if self.functions:
@@ -230,6 +241,16 @@ class Coder:
         wrap_fence("sourcecode"),
     ]
     fence = fences[0]
+
+    def show_pretty(self):
+        if not self.pretty:
+            return False
+
+        # only show pretty output if fences are the normal triple-backtick
+        if self.fence != self.fences[0]:
+            return False
+
+        return True
 
     def get_abs_fnames_content(self):
         for fname in list(self.abs_fnames):
@@ -290,6 +311,13 @@ class Coder:
 
     def get_files_messages(self):
         all_content = ""
+
+        repo_content = self.get_repo_map()
+        if repo_content:
+            if all_content:
+                all_content += "\n"
+            all_content += repo_content
+
         if self.abs_fnames:
             files_content = self.gpt_prompts.files_content_prefix
             files_content += self.get_files_content()
@@ -298,20 +326,10 @@ class Coder:
 
         all_content += files_content
 
-        repo_content = self.get_repo_map()
-        if repo_content:
-            if all_content:
-                all_content += "\n"
-            all_content += repo_content
-
         files_messages = [
             dict(role="user", content=all_content),
             dict(role="assistant", content="Ok."),
         ]
-        if self.abs_fnames:
-            files_messages += [
-                dict(role="system", content=self.fmt_system_reminder()),
-            ]
 
         return files_messages
 
@@ -376,7 +394,7 @@ class Coder:
         self.summarizer_thread = None
 
         self.done_messages = self.summarized_done_messages
-        self.summarized_done_messages = None
+        self.summarized_done_messages = []
 
     def move_back_cur_messages(self, message):
         self.done_messages += self.cur_messages
@@ -407,21 +425,14 @@ class Coder:
 
         return self.send_new_user_message(inp)
 
-    def fmt_system_reminder(self):
-        prompt = self.gpt_prompts.system_reminder
+    def fmt_system_prompt(self, prompt):
         prompt = prompt.format(fence=self.fence)
         return prompt
 
-    def send_new_user_message(self, inp):
+    def format_messages(self):
         self.choose_fence()
-
-        self.cur_messages += [
-            dict(role="user", content=inp),
-        ]
-
-        main_sys = self.gpt_prompts.main_system
-        # if self.main_model.max_context_tokens > 4 * 1024:
-        main_sys += "\n" + self.fmt_system_reminder()
+        main_sys = self.fmt_system_prompt(self.gpt_prompts.main_system)
+        main_sys += "\n" + self.fmt_system_prompt(self.gpt_prompts.system_reminder)
 
         messages = [
             dict(role="system", content=main_sys),
@@ -430,7 +441,35 @@ class Coder:
         self.summarize_end()
         messages += self.done_messages
         messages += self.get_files_messages()
+
+        reminder_message = [
+            dict(role="system", content=self.fmt_system_prompt(self.gpt_prompts.system_reminder)),
+        ]
+
+        messages_tokens = self.main_model.token_count(messages)
+        reminder_tokens = self.main_model.token_count(reminder_message)
+        cur_tokens = self.main_model.token_count(self.cur_messages)
+
+        if None not in (messages_tokens, reminder_tokens, cur_tokens):
+            total_tokens = messages_tokens + reminder_tokens + cur_tokens
+        else:
+            # add the reminder anyway
+            total_tokens = 0
+
+        # Add the reminder prompt if we still have room to include it.
+        if total_tokens < self.main_model.max_context_tokens:
+            messages += reminder_message
+
         messages += self.cur_messages
+
+        return messages
+
+    def send_new_user_message(self, inp):
+        self.cur_messages += [
+            dict(role="user", content=inp),
+        ]
+
+        messages = self.format_messages()
 
         if self.verbose:
             utils.show_messages(messages, functions=self.functions)
@@ -441,7 +480,7 @@ class Coder:
             interrupted = self.send(messages, functions=self.functions)
         except ExhaustedContextWindow:
             exhausted = True
-        except openai.error.InvalidRequestError as err:
+        except openai.BadRequestError as err:
             if "maximum context length" in str(err):
                 exhausted = True
             else:
@@ -558,7 +597,9 @@ class Coder:
 
         interrupted = False
         try:
-            hash_object, completion = send_with_retries(model, messages, functions, self.stream)
+            hash_object, completion = send_with_retries(
+                self.client, model, messages, functions, self.stream
+            )
             self.chat_completion_call_hashes.append(hash_object.hexdigest())
 
             if self.stream:
@@ -620,7 +661,7 @@ class Coder:
                 self.total_cost += cost
 
         show_resp = self.render_incremental_response(True)
-        if self.pretty:
+        if self.show_pretty():
             show_resp = Markdown(
                 show_resp, style=self.assistant_output_color, code_theme=self.code_theme
             )
@@ -634,7 +675,7 @@ class Coder:
 
     def show_send_output_stream(self, completion):
         live = None
-        if self.pretty:
+        if self.show_pretty():
             live = Live(vertical_overflow="scroll")
 
         try:
@@ -669,7 +710,7 @@ class Coder:
                 except AttributeError:
                     text = None
 
-                if self.pretty:
+                if self.show_pretty():
                     self.live_incremental_response(live, False)
                 elif text:
                     sys.stdout.write(text)
@@ -703,6 +744,7 @@ class Coder:
         else:
             files = self.get_inchat_relative_files()
 
+        files = [fname for fname in files if Path(self.abs_root_path(fname)).is_file()]
         return sorted(set(files))
 
     def get_all_abs_files(self):
@@ -911,9 +953,16 @@ class Coder:
         return True
 
 
-def check_model_availability(io, main_model):
-    available_models = openai.Model.list()
-    model_ids = [model.id for model in available_models["data"]]
+def check_model_availability(io, client, main_model):
+    try:
+        available_models = client.models.list()
+    except openai.NotFoundError:
+        # Azure sometimes returns 404?
+        # https://discord.com/channels/1131200896827654144/1182327371232186459
+        io.tool_error("Unable to list available models, proceeding with {main_model.name}")
+        return True
+
+    model_ids = sorted(model.id for model in available_models)
     if main_model.name in model_ids:
         return True
 

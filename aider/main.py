@@ -60,10 +60,10 @@ def setup_git(git_root, io):
     with repo.config_writer() as git_config:
         if not global_git_config.has_option("user", "name"):
             git_config.set_value("user", "name", "Your Name")
-            io.tool_error('Update git name with: git config --global user.name "Your Name"')
+            io.tool_error('Update git name with: git config user.name "Your Name"')
         if not global_git_config.has_option("user", "email"):
             git_config.set_value("user", "email", "you@example.com")
-            io.tool_error('Update git email with: git config --global user.email "you@example.com"')
+            io.tool_error('Update git email with: git config user.email "you@example.com"')
 
     io.tool_output("Git repository created in the current working directory.")
 
@@ -86,6 +86,8 @@ def check_gitignore(git_root, io, ask=True):
     gitignore_file = Path(git_root) / ".gitignore"
     if gitignore_file.exists():
         content = io.read_text(gitignore_file)
+        if content is None:
+            return
         if pat in content.splitlines():
             return
     else:
@@ -155,12 +157,13 @@ def main(argv=None, input=None, output=None, force_git_root=None):
         default=False,
         help="Override to skip model availability check (default: False)",
     )
+    default_3_model = models.GPT35_1106
     core_group.add_argument(
         "-3",
         action="store_const",
         dest="model",
-        const=models.GPT35_16k.name,
-        help=f"Use {models.GPT35_16k.name} model for the main chat (gpt-4 is better)",
+        const=default_3_model.name,
+        help=f"Use {default_3_model.name} model for the main chat (gpt-4 is better)",
     )
     core_group.add_argument(
         "--voice-language",
@@ -174,27 +177,22 @@ def main(argv=None, input=None, output=None, force_git_root=None):
     model_group.add_argument(
         "--openai-api-base",
         metavar="OPENAI_API_BASE",
-        help="Specify the openai.api_base (default: https://api.openai.com/v1)",
+        help="Specify the api base url",
     )
     model_group.add_argument(
         "--openai-api-type",
         metavar="OPENAI_API_TYPE",
-        help="Specify the openai.api_type",
+        help="Specify the api_type",
     )
     model_group.add_argument(
         "--openai-api-version",
         metavar="OPENAI_API_VERSION",
-        help="Specify the openai.api_version",
+        help="Specify the api_version",
     )
     model_group.add_argument(
         "--openai-api-deployment-id",
         metavar="OPENAI_API_DEPLOYMENT_ID",
-        help="Specify the deployment_id arg to be passed to openai.ChatCompletion.create()",
-    )
-    model_group.add_argument(
-        "--openai-api-engine",
-        metavar="OPENAI_API_ENGINE",
-        help="Specify the engine arg to be passed to openai.ChatCompletion.create()",
+        help="Specify the deployment_id",
     )
     model_group.add_argument(
         "--edit-format",
@@ -305,6 +303,15 @@ def main(argv=None, input=None, output=None, force_git_root=None):
         default=True,
         help="Enable/disable adding .aider* to .gitignore (default: True)",
     )
+    default_aiderignore_file = (
+        os.path.join(git_root, ".aiderignore") if git_root else ".aiderignore"
+    )
+    git_group.add_argument(
+        "--aiderignore",
+        metavar="AIDERIGNORE",
+        default=default_aiderignore_file,
+        help="Specify the aider ignore file (default: .aiderignore in git root)",
+    )
     git_group.add_argument(
         "--auto-commits",
         action=argparse.BooleanOptionalAction,
@@ -321,7 +328,13 @@ def main(argv=None, input=None, output=None, force_git_root=None):
         "--dry-run",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Enable/disable performing a dry run without modifying files (default: False)",
+        help="Perform a dry run without modifying files (default: False)",
+    )
+    git_group.add_argument(
+        "--commit",
+        action="store_true",
+        help="Commit all pending changes with a suitable commit message, then exit",
+        default=False,
     )
 
     ##########
@@ -364,6 +377,17 @@ def main(argv=None, input=None, output=None, force_git_root=None):
         help="Specify a single message to send GPT, process reply then exit (disables chat mode)",
     )
     other_group.add_argument(
+        "--message-file",
+        "-f",
+        metavar="MESSAGE_FILE",
+        help="Specify a file containing the message to send GPT, process reply, then exit (disables chat mode)",
+    )
+    other_group.add_argument(
+        "--encoding",
+        default="utf-8",
+        help="Specify the encoding for input and output (default: utf-8)",
+    )
+    other_group.add_argument(
         "-c",
         "--config",
         is_config_file=True,
@@ -399,6 +423,7 @@ def main(argv=None, input=None, output=None, force_git_root=None):
         tool_output_color=args.tool_output_color,
         tool_error_color=args.tool_error_color,
         dry_run=args.dry_run,
+        encoding=args.encoding,
     )
 
     fnames = [str(Path(fn).resolve()) for fn in args.files]
@@ -469,23 +494,34 @@ def main(argv=None, input=None, output=None, force_git_root=None):
             )
         return 1
 
-    openai.api_key = args.openai_api_key
-    for attr in ("base", "type", "version", "deployment_id", "engine"):
-        arg_key = f"openai_api_{attr}"
-        val = getattr(args, arg_key)
-        if val is not None:
-            mod_key = f"api_{attr}"
-            setattr(openai, mod_key, val)
-            io.tool_output(f"Setting openai.{mod_key}={val}")
+    if args.openai_api_type == "azure":
+        client = openai.AzureOpenAI(
+            api_key=args.openai_api_key,
+            azure_endpoint=args.openai_api_base,
+            api_version=args.openai_api_version,
+            azure_deployment=args.openai_api_deployment_id,
+        )
+    else:
+        kwargs = dict()
+        if args.openai_api_base:
+            kwargs["base_url"] = args.openai_api_base
+            if "openrouter.ai" in args.openai_api_base:
+                kwargs["default_headers"] = {
+                    "HTTP-Referer": "http://aider.chat",
+                    "X-Title": "Aider",
+                }
 
-    main_model = models.Model.create(args.model)
+        client = openai.OpenAI(api_key=args.openai_api_key, **kwargs)
+
+    main_model = models.Model.create(args.model, client)
 
     try:
         coder = Coder.create(
-            main_model,
-            args.edit_format,
-            io,
-            args.skip_model_availability_check,
+            main_model=main_model,
+            edit_format=args.edit_format,
+            io=io,
+            skip_model_availabily_check=args.skip_model_availability_check,
+            client=client,
             ##
             fnames=fnames,
             git_dname=git_dname,
@@ -501,10 +537,15 @@ def main(argv=None, input=None, output=None, force_git_root=None):
             stream=args.stream,
             use_git=args.git,
             voice_language=args.voice_language,
+            aider_ignore_file=args.aiderignore,
         )
     except ValueError as err:
         io.tool_error(str(err))
         return 1
+
+    if args.commit:
+        coder.commands.cmd_commit("")
+        return
 
     if args.show_repo_map:
         repo_map = coder.get_repo_map()
@@ -532,8 +573,20 @@ def main(argv=None, input=None, output=None, force_git_root=None):
         io.tool_error(f"Git working dir: {git_root}")
 
     if args.message:
+        io.add_to_input_history(args.message)
         io.tool_output()
         coder.run(with_message=args.message)
+    elif args.message_file:
+        try:
+            message_from_file = io.read_text(args.message_file)
+            io.tool_output()
+            coder.run(with_message=message_from_file)
+        except FileNotFoundError:
+            io.tool_error(f"Message file not found: {args.message_file}")
+            return 1
+        except IOError as e:
+            io.tool_error(f"Error reading message file: {e}")
+            return 1
     else:
         coder.run()
 

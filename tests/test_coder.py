@@ -10,7 +10,7 @@ from aider import models
 from aider.coders import Coder
 from aider.dump import dump  # noqa: F401
 from aider.io import InputOutput
-from tests.utils import GitTemporaryDirectory
+from tests.utils import ChdirTemporaryDirectory, GitTemporaryDirectory
 
 
 class TestCoder(unittest.TestCase):
@@ -122,33 +122,6 @@ class TestCoder(unittest.TestCase):
             fname.unlink()
             self.assertEqual(coder.get_last_modified(), 0)
 
-    def test_check_for_file_mentions(self):
-        # Mock the IO object
-        mock_io = MagicMock()
-
-        # Initialize the Coder object with the mocked IO and mocked repo
-        coder = Coder.create(models.GPT4, None, mock_io)
-
-        # Mock the git repo
-        mock = MagicMock()
-        mock.return_value = set(["file1.txt", "file2.py"])
-        coder.repo.get_tracked_files = mock
-
-        # Call the check_for_file_mentions method
-        coder.check_for_file_mentions("Please check file1.txt and file2.py")
-
-        # Check if coder.abs_fnames contains both files
-        expected_files = set(
-            map(
-                str,
-                [
-                    Path(coder.root) / "file1.txt",
-                    Path(coder.root) / "file2.py",
-                ],
-            )
-        )
-        self.assertEqual(coder.abs_fnames, expected_files)
-
     def test_get_files_content(self):
         tempdir = Path(tempfile.mkdtemp())
 
@@ -167,31 +140,37 @@ class TestCoder(unittest.TestCase):
         self.assertIn("file1.txt", content)
         self.assertIn("file2.txt", content)
 
-    def test_check_for_filename_mentions_of_longer_paths(self):
-        # Mock the IO object
-        mock_io = MagicMock()
+    def test_check_for_filename_mentions(self):
+        with GitTemporaryDirectory():
+            repo = git.Repo()
 
-        # Initialize the Coder object with the mocked IO and mocked repo
-        coder = Coder.create(models.GPT4, None, mock_io)
+            mock_io = MagicMock()
 
-        mock = MagicMock()
-        mock.return_value = set(["file1.txt", "file2.py"])
-        coder.repo.get_tracked_files = mock
+            fname1 = Path("file1.txt")
+            fname2 = Path("file2.py")
 
-        # Call the check_for_file_mentions method
-        coder.check_for_file_mentions("Please check file1.txt and file2.py")
+            fname1.write_text("one\n")
+            fname2.write_text("two\n")
 
-        # Check if coder.abs_fnames contains both files
-        expected_files = set(
-            map(
-                str,
+            repo.git.add(str(fname1))
+            repo.git.add(str(fname2))
+            repo.git.commit("-m", "new")
+
+            # Initialize the Coder object with the mocked IO and mocked repo
+            coder = Coder.create(models.GPT4, None, mock_io)
+
+            # Call the check_for_file_mentions method
+            coder.check_for_file_mentions("Please check file1.txt and file2.py")
+
+            # Check if coder.abs_fnames contains both files
+            expected_files = set(
                 [
-                    Path(coder.root) / "file1.txt",
-                    Path(coder.root) / "file2.py",
-                ],
+                    str(Path(coder.root) / fname1),
+                    str(Path(coder.root) / fname2),
+                ]
             )
-        )
-        self.assertEqual(coder.abs_fnames, expected_files)
+
+            self.assertEqual(coder.abs_fnames, expected_files)
 
     def test_check_for_ambiguous_filename_mentions_of_longer_paths(self):
         with GitTemporaryDirectory():
@@ -352,22 +331,26 @@ class TestCoder(unittest.TestCase):
         # both files should still be here
         self.assertEqual(len(coder.abs_fnames), 2)
 
-    @patch("aider.coders.base_coder.openai.ChatCompletion.create")
-    def test_run_with_invalid_request_error(self, mock_chat_completion_create):
-        # Mock the IO object
-        mock_io = MagicMock()
+    def test_run_with_invalid_request_error(self):
+        with ChdirTemporaryDirectory():
+            # Mock the IO object
+            mock_io = MagicMock()
 
-        # Initialize the Coder object with the mocked IO and mocked repo
-        coder = Coder.create(models.GPT4, None, mock_io)
+            mock_client = MagicMock()
 
-        # Set up the mock to raise InvalidRequestError
-        mock_chat_completion_create.side_effect = openai.error.InvalidRequestError(
-            "Invalid request", "param"
-        )
+            # Initialize the Coder object with the mocked IO and mocked repo
+            coder = Coder.create(models.GPT4, None, mock_io, client=mock_client)
 
-        # Call the run method and assert that InvalidRequestError is raised
-        with self.assertRaises(openai.error.InvalidRequestError):
-            coder.run(with_message="hi")
+            # Set up the mock to raise
+            mock_client.chat.completions.create.side_effect = openai.BadRequestError(
+                message="Invalid request",
+                response=MagicMock(),
+                body=None,
+            )
+
+            # Call the run method and assert that InvalidRequestError is raised
+            with self.assertRaises(openai.BadRequestError):
+                coder.run(with_message="hi")
 
     def test_new_file_edit_one_commit(self):
         """A new file shouldn't get pre-committed before the GPT edit commit"""
@@ -390,10 +373,10 @@ class TestCoder(unittest.TestCase):
 Do this:
 
 {str(fname)}
-<<<<<<< HEAD
+<<<<<<< SEARCH
 =======
 new
->>>>>>> updated
+>>>>>>> REPLACE
 
 """
                 coder.partial_response_function_call = dict()
@@ -440,11 +423,11 @@ new
 Do this:
 
 {str(fname2)}
-<<<<<<< HEAD
+<<<<<<< SEARCH
 two
 =======
 TWO
->>>>>>> updated
+>>>>>>> REPLACE
 
 """
                 coder.partial_response_function_call = dict()
@@ -492,11 +475,11 @@ TWO
 Do this:
 
 {str(fname)}
-<<<<<<< HEAD
+<<<<<<< SEARCH
 two
 =======
 three
->>>>>>> updated
+>>>>>>> REPLACE
 
 """
                 coder.partial_response_function_call = dict()
@@ -569,11 +552,11 @@ three
 Do this:
 
 {str(fname)}
-<<<<<<< HEAD
+<<<<<<< SEARCH
 one
 =======
 two
->>>>>>> updated
+>>>>>>> REPLACE
 
 """
                 coder.partial_response_function_call = dict()
