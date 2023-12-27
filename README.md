@@ -165,7 +165,9 @@ For a discussion of using other non-OpenAI models, see the
 
 ## Installation
 
-See the [installation instructions](https://aider.chat/docs/install.html).
+WIX: pip install git+https://github.com/h0x91b/aider.git@wix
+
+Original: See the [installation instructions](https://aider.chat/docs/install.html).
 
 ## FAQ
 
